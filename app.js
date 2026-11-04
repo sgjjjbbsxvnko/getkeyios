@@ -81,12 +81,21 @@ async function startLink4m() {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
     });
     const json = await response.json().catch(() => ({}));
-    if (!response.ok || !json.ok || typeof json.shortUrl !== 'string')
-      throw new Error(json.error || 'INVALID_RESPONSE');
+    if (!response.ok || !json.ok || typeof json.shortUrl !== 'string') {
+      const err = new Error(json.error || 'INVALID_RESPONSE');
+      // Hostname only; never accept or display the raw URL or the API token.
+      if (typeof json.blockedHostname === 'string' &&
+          /^[a-z0-9.-]{1,253}$/i.test(json.blockedHostname)) {
+        err.blockedHostname = json.blockedHostname;
+      }
+      throw err;
+    }
     // Short URL is validated by the server; never accept a URL from query params.
     window.location.assign(json.shortUrl);
   } catch (err) {
-    notice(friendly(err), true);
+    const details = err?.blockedHostname ?
+      ` Tên miền đã trả về: ${err.blockedHostname}. Hãy kiểm tra tên miền này có thuộc Link4M trước khi đưa vào danh sách cho phép.` : '';
+    notice(friendly(err) + details, true);
     setBusy(button, false, '✦ Vượt Link4M nhận Key 24H');
   }
 }

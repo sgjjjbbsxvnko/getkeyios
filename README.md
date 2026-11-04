@@ -153,3 +153,7 @@ Bản sửa bổ sung xử lý redirect HTTPS với giới hạn máy chủ API 
 Lưu ý: Đây không phải công cụ vượt xác minh nhà cung cấp. API token lộ trong ảnh hoặc tin nhắn phải được chủ tài khoản đủ điều kiện thay mới và lưu bằng Cloudflare Secret. Không đưa secret vào repository, và không mặc định rằng callback chứng minh một lượt hoàn tất hợp lệ.
 
 Kết nối GitHub của buổi kiểm tra hiện trả 403 khi ghi vào repo, vì vậy bộ ZIP là bản cập nhật độc lập cho tới khi có quyền ghi.
+
+## Chẩn đoán tên miền Link4M
+
+Worker sẽ trả về `blockedHostname` khi API Link4M trả URL rút gọn ở hostname chưa được phép; giao diện chỉ hiển thị hostname, không công khai token hay URL callback. Không thêm hostname cho đến khi xác minh nó thuộc Link4M, và không tắt danh sách cho phép. Chức năng này chỉ phục vụ chẩn đoán, **không tự động cho phép** hostname mới.

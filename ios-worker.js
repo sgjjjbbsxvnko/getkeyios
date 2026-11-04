@@ -329,8 +329,13 @@ async function shortenLink(env, destination) {
   const host = target.hostname.toLowerCase();
   const allowed = String(env.LINK4M_ALLOWED_SHORT_HOSTS || 'link4m.co,link4m.com,www.link4m.co,www.link4m.com')
     .split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
-  if (target.protocol !== 'https:' || !allowed.includes(host) || target.username || target.password)
-    throw new Error('LINK4M_UNTRUSTED_SHORT_URL');
+  if (target.protocol !== 'https:' || !allowed.includes(host) || target.username || target.password) {
+    // Only share the parsed hostname for troubleshooting. Never expose the
+    // full URL (which can contain a callback token) or the provider API token.
+    const err = new Error('LINK4M_UNTRUSTED_SHORT_URL');
+    err.blockedHostname = host.slice(0, 253);
+    throw err;
+  }
   return target.toString();
 }
 async function handleLinkStart(request, env) {
@@ -478,6 +483,10 @@ export default {
       const known = new Set(['INVALID_KEY_FORMAT','INVALID_DEVICE_ID','INVALID_NONCE','INVALID_LINK_SESSION','JSON_REQUIRED','INVALID_JSON','BODY_TOO_LARGE']);
       if (known.has(code)) return apiError(code, code === 'BODY_TOO_LARGE' ? 413 : 400);
       if (code.endsWith('_NOT_CONFIGURED')) return apiError('SERVICE_NOT_CONFIGURED', 503);
+      if (code === 'LINK4M_UNTRUSTED_SHORT_URL') {
+        const hostname = String(err?.blockedHostname || '').slice(0, 253);
+        return apiJson({ ok: false, error: code, blockedHostname: hostname }, 502);
+      }
       if (code.startsWith('LINK4M_')) return apiError(code, code === 'LINK4M_TIMEOUT' ? 504 : code === 'LINK4M_RATE_LIMITED' ? 429 : 502);
       console.error('iOS auth error:', err);
       return apiError('INTERNAL_ERROR', 500);
