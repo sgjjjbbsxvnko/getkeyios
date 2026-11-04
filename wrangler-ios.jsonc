@@ -6,17 +6,35 @@
   "assets": {
     "directory": "./ios-site",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/senttwgetkey", "/senttwnhankey"]
+    "run_worker_first": [
+      "/api/*",
+      "/senttwgetkey",
+      "/senttwnhankey"
+    ]
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "sent-ios-key-db",
-      "database_id": "REPLACE_WITH_IOS_D1_DATABASE_ID"
+      "database_id": "4f732554-4c1a-41b8-b8fc-d4634b66a6d7"
     }
   ],
   "ratelimits": [
-    { "name": "IOS_API_LIMITER", "namespace_id": "12094101", "simple": { "limit": 60, "period": 60 } },
-    { "name": "IOS_ADMIN_LIMITER", "namespace_id": "12094102", "simple": { "limit": 10, "period": 60 } }
+    {
+      "name": "IOS_API_LIMITER",
+      "namespace_id": "12094101",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    },
+    {
+      "name": "IOS_ADMIN_LIMITER",
+      "namespace_id": "12094102",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
   ]
 }

@@ -145,3 +145,11 @@ Tập tin `ios-schema.sql` chỉ dành cho D1 iOS mới. Không chạy migration
 ### Nâng cấp từ bản iOS trước (không mất key)
 
 Chạy `npm run migrate` một lần trên **D1 iOS** của bạn; SQL chỉ tạo thêm bảng `ios_link_sessions` nếu chưa có. Đối với triển khai mới, chạy `npm run migrate` trước `npm run deploy`. Thêm `LINK4M_API_TOKEN` vào secrets iOS. Không chỉnh database hay Worker Android.
+
+## Sửa lỗi Link4M — 2026-11-04
+
+Bản sửa bổ sung xử lý redirect HTTPS với giới hạn máy chủ API được phép, giới hạn kích thước JSON, timeout, và các mã lỗi cho HTTP 401/403/429/5xx và kết nối bị ngắt. Giao diện hiển thị mã lỗi cụ thể thay cho lời nhắn chung. Có thể chạy `npm test` để kiểm tra cả lỗi Link4M mô phỏng.
+
+Lưu ý: Đây không phải công cụ vượt xác minh nhà cung cấp. API token lộ trong ảnh hoặc tin nhắn phải được chủ tài khoản đủ điều kiện thay mới và lưu bằng Cloudflare Secret. Không đưa secret vào repository, và không mặc định rằng callback chứng minh một lượt hoàn tất hợp lệ.
+
+Kết nối GitHub của buổi kiểm tra hiện trả 403 khi ghi vào repo, vì vậy bộ ZIP là bản cập nhật độc lập cho tới khi có quyền ghi.

@@ -244,26 +244,90 @@ function linkError(request, code) {
   uri.searchParams.set('link4m_error', code);
   return redirectNoStore(uri.toString());
 }
+// Strict upstream origin handling: an API token must never follow redirects to
+// arbitrary third-party hosts. Only allow the Link4M API hosts to redirect.
+const LINK4M_API_HOSTS = new Set(['link4m.co', 'www.link4m.co', 'link4m.com', 'www.link4m.com']);
+const LINK4M_RESPONSE_MAX = 16 * 1024;
+async function limitedProviderText(response) {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const buffers = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > LINK4M_RESPONSE_MAX) {
+        await reader.cancel();
+        throw new Error('LINK4M_RESPONSE_TOO_LARGE');
+      }
+      buffers.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const buffer of buffers) { combined.set(buffer, offset); offset += buffer.length; }
+  return new TextDecoder().decode(combined);
+}
+function validateApiDestination(url) {
+  if (url.protocol !== 'https:' || !LINK4M_API_HOSTS.has(url.hostname.toLowerCase()) ||
+      url.username || url.password || !/^\/api-shorten\/v2\/?$/.test(url.pathname)) {
+    throw new Error('LINK4M_UNTRUSTED_API_REDIRECT');
+  }
+}
 async function shortenLink(env, destination) {
   const apiKey = String(env.LINK4M_API_TOKEN || '').trim();
   if (!apiKey) throw new Error('LINK4M_NOT_CONFIGURED');
-  const link4m = new URL('https://link4m.co/api-shorten/v2');
+  let link4m = new URL('https://link4m.co/api-shorten/v2');
   link4m.searchParams.set('api', apiKey);
   link4m.searchParams.set('url', destination);
-  const response = await fetch(link4m, { method: 'GET', headers: { accept: 'application/json' },
-    redirect: 'error' });
+  let response;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    validateApiDestination(link4m);
+    try {
+      response = await fetch(link4m.toString(), {
+        method: 'GET', headers: { accept: 'application/json' },
+        redirect: 'manual', signal: AbortSignal.timeout(12000)
+      });
+    } catch (e) {
+      if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw new Error('LINK4M_TIMEOUT');
+      throw new Error('LINK4M_NETWORK_ERROR');
+    }
+    if (![301, 302, 303, 307, 308].includes(response.status)) break;
+    const location = response.headers.get('location');
+    if (!location) throw new Error('LINK4M_INVALID_API_REDIRECT');
+    let next;
+    try { next = new URL(location, link4m); }
+    catch { throw new Error('LINK4M_INVALID_API_REDIRECT'); }
+    validateApiDestination(next);
+    // Preserve required query parameters if canonical-host redirects omit them.
+    next.searchParams.set('api', apiKey);
+    next.searchParams.set('url', destination);
+    link4m = next;
+    if (attempt === 2) throw new Error('LINK4M_REDIRECT_LOOP');
+  }
+  if (!response) throw new Error('LINK4M_NETWORK_ERROR');
+  if (response.status === 401 || response.status === 403) throw new Error('LINK4M_AUTH_FAILED');
+  if (response.status === 429) throw new Error('LINK4M_RATE_LIMITED');
+  if (response.status >= 500) throw new Error('LINK4M_UPSTREAM_UNAVAILABLE');
   if (!response.ok) throw new Error('LINK4M_API_FAILED');
-  const raw = await response.text();
-  if (raw.length > 16384) throw new Error('LINK4M_RESPONSE_TOO_LARGE');
+  const raw = await limitedProviderText(response);
   let result;
-  try { result = JSON.parse(raw); } catch { throw new Error('LINK4M_INVALID_RESPONSE'); }
-  if (String(result?.status || '').toLowerCase() !== 'success') throw new Error('LINK4M_API_FAILED');
-  const shortUrl = result.shortenedUrl || result.shortened_url || result.shortUrl;
+  try { result = JSON.parse(raw); }
+  catch { throw new Error('LINK4M_INVALID_RESPONSE'); }
+  if (String(result?.status || '').toLowerCase() !== 'success') {
+    // Avoid exposing upstream error messages containing account information.
+    throw new Error('LINK4M_API_REJECTED');
+  }
+  const shortUrl = result.shortenedUrl || result.shortened_url ||
+    result.shortUrl || result.short_url;
   if (typeof shortUrl !== 'string') throw new Error('LINK4M_INVALID_SHORT_URL');
   let target;
-  try { target = new URL(shortUrl); } catch { throw new Error('LINK4M_INVALID_SHORT_URL'); }
+  try { target = new URL(shortUrl); }
+  catch { throw new Error('LINK4M_INVALID_SHORT_URL'); }
   const host = target.hostname.toLowerCase();
-  const allowed = String(env.LINK4M_ALLOWED_SHORT_HOSTS || 'link4m.co,link4m.com')
+  const allowed = String(env.LINK4M_ALLOWED_SHORT_HOSTS || 'link4m.co,link4m.com,www.link4m.co,www.link4m.com')
     .split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
   if (target.protocol !== 'https:' || !allowed.includes(host) || target.username || target.password)
     throw new Error('LINK4M_UNTRUSTED_SHORT_URL');
@@ -284,8 +348,10 @@ async function handleLinkStart(request, env) {
     const shortUrl = await shortenLink(env, callback.toString());
     return apiJson({ ok: true, shortUrl });
   } catch (e) {
-    await env.DB.prepare("DELETE FROM ios_link_sessions WHERE session_hash = ? AND stage = 'started'")
-      .bind(sessionHash).run();
+    try {
+      await env.DB.prepare("DELETE FROM ios_link_sessions WHERE session_hash = ? AND stage = 'started'")
+        .bind(sessionHash).run();
+    } catch { /* Do not hide the original Link4M error on cleanup failure. */ }
     throw e;
   }
 }
@@ -412,7 +478,7 @@ export default {
       const known = new Set(['INVALID_KEY_FORMAT','INVALID_DEVICE_ID','INVALID_NONCE','INVALID_LINK_SESSION','JSON_REQUIRED','INVALID_JSON','BODY_TOO_LARGE']);
       if (known.has(code)) return apiError(code, code === 'BODY_TOO_LARGE' ? 413 : 400);
       if (code.endsWith('_NOT_CONFIGURED')) return apiError('SERVICE_NOT_CONFIGURED', 503);
-      if (code.startsWith('LINK4M_')) return apiError(code, 502);
+      if (code.startsWith('LINK4M_')) return apiError(code, code === 'LINK4M_TIMEOUT' ? 504 : code === 'LINK4M_RATE_LIMITED' ? 429 : 502);
       console.error('iOS auth error:', err);
       return apiError('INTERNAL_ERROR', 500);
     }
