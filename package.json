@@ -1,0 +1,14 @@
+{
+  "name": "sent-ios-getkey",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler-ios.jsonc",
+    "deploy": "wrangler deploy --config wrangler-ios.jsonc",
+    "migrate": "wrangler d1 execute sent-ios-key-db --remote --file=ios-schema.sql --config wrangler-ios.jsonc",
+    "test": "node test-auth.mjs && node test-link4m.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.36.0"
+  }
+}

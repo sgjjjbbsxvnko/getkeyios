@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "sent-ios-getkey",
+  "main": "ios-worker.js",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "./ios-site",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/senttwgetkey", "/senttwnhankey"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sent-ios-key-db",
+      "database_id": "REPLACE_WITH_IOS_D1_DATABASE_ID"
+    }
+  ],
+  "ratelimits": [
+    { "name": "IOS_API_LIMITER", "namespace_id": "12094101", "simple": { "limit": 60, "period": 60 } },
+    { "name": "IOS_ADMIN_LIMITER", "namespace_id": "12094102", "simple": { "limit": 10, "period": 60 } }
+  ]
+}
