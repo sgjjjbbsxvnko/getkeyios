@@ -48,12 +48,29 @@ const messages = {
   D1_NOT_CONFIGURED: 'Cơ sở dữ liệu chưa được cấu hình.',
   SERVICE_NOT_CONFIGURED: 'Máy chủ chưa cấu hình đầy đủ.',
   LINK4M_NOT_CONFIGURED: 'Chưa cấu hình Link4M trên máy chủ iOS.',
-  LINK4M_API_FAILED: 'Link4M không thể tạo link. Thử lại sau.',
+  LINK4M_API_FAILED: 'Link4M trả về lỗi khi tạo link (LINK4M_API_FAILED).',
+  LINK4M_API_REJECTED: 'Link4M từ chối yêu cầu. Chủ tài khoản hãy kiểm tra API token và quyền sử dụng dịch vụ.',
+  LINK4M_AUTH_FAILED: 'API token Link4M không hợp lệ hoặc tài khoản không có quyền (401/403).',
+  LINK4M_RATE_LIMITED: 'Link4M đang giới hạn số lần tạo link. Hãy thử lại sau.',
+  LINK4M_UPSTREAM_UNAVAILABLE: 'Máy chủ Link4M đang gặp lỗi (5xx).',
+  LINK4M_TIMEOUT: 'Kết nối Link4M hết thời gian chờ.',
+  LINK4M_NETWORK_ERROR: 'Worker không kết nối được tới API Link4M.',
+  LINK4M_INVALID_RESPONSE: 'API Link4M không trả về JSON hợp lệ.',
+  LINK4M_INVALID_SHORT_URL: 'API Link4M chưa trả về URL rút gọn hợp lệ.',
+  LINK4M_RESPONSE_TOO_LARGE: 'Phản hồi Link4M vượt quá giới hạn an toàn.',
+  LINK4M_UNTRUSTED_API_REDIRECT: 'Link4M yêu cầu chuyển tới máy chủ API không được tin cậy.',
+  LINK4M_INVALID_API_REDIRECT: 'Link4M trả về chuyển hướng API không hợp lệ.',
+  LINK4M_REDIRECT_LOOP: 'Link4M chuyển hướng API quá nhiều lần.',
+  INVALID_RESPONSE: 'Máy chủ iOS trả về kết quả không hợp lệ.',
+  INTERNAL_ERROR: 'Worker gặp lỗi nội bộ. Kiểm tra Cloudflare Worker Logs.',
   LINK4M_UNTRUSTED_SHORT_URL: 'Link4M trả về tên miền chưa được cho phép.',
   LINK_SESSION_EXPIRED: 'Phiên Link4M đã hết hạn. Hãy nhận key lại.',
   LINK4M_STEPS_REQUIRED: 'Chưa xác nhận đủ hai bước Link4M.'
 };
-function friendly(error) { return messages[error?.message] || 'Không thực hiện được. Vui lòng thử lại hoặc liên hệ quản trị viên.'; }
+function friendly(error) {
+  const code = String(error?.message || 'NETWORK_ERROR').replace(/[^A-Z0-9_]/gi, '').slice(0,60);
+  return messages[code] || `Không thể thực hiện (mã lỗi: ${code}). Vui lòng báo quản trị viên.`;
+}
 async function startLink4m() {
   const button = $('generateBtn');
   setBusy(button, true, '✦ Vượt Link4M nhận Key 24H');
